@@ -1,0 +1,291 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Frequency {
+  ONCE
+  DAILY
+  WEEKLY
+}
+
+enum AchievementRule {
+  COMPLETION_COUNT
+  STREAK_DAYS
+  LEVEL_REACHED
+  CATEGORY_COUNT
+}
+
+enum RewardKind {
+  PROFILE_TITLE
+  PROFILE_FRAME
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(254)
+  passwordHash String   @db.VarChar(255)
+  displayName  String   @db.VarChar(80)
+  timeZone     String   @default("America/La_Paz") @db.VarChar(64)
+  totalXp      Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions    Session[]
+  projects    Project[]
+  activities  Activity[]
+  progress    ProgressEntry[]
+  completions Completion[]
+  xpMovements XpMovement[]
+  activeDays  ActiveDay[]
+  badges      UserBadge[]
+  rewards     UserReward[]
+}
+
+// The JWT's sid identifies this revocable session. No raw token is persisted.
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Category {
+  id           String             @id @default(uuid()) @db.Uuid
+  slug         String             @unique @db.VarChar(40)
+  name         String             @db.VarChar(80)
+  displayOrder Int
+  revisions    ActivityRevision[]
+}
+
+// A project task is an ONCE Activity with projectId, not a second completion system.
+model Project {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @db.Uuid
+  title       String     @db.VarChar(120)
+  description String?    @db.VarChar(2000)
+  startDate   DateTime   @db.Date
+  endDate     DateTime?  @db.Date
+  archivedAt  DateTime?  @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tasks       Activity[]
+
+  @@unique([id, userId])
+  @@index([userId, archivedAt, createdAt])
+}
+
+model Activity {
+  id                  String             @id @default(uuid()) @db.Uuid
+  userId              String             @db.Uuid
+  projectId           String?            @db.Uuid
+  frequency           Frequency
+  startDate           DateTime           @db.Date
+  scheduleTimeZone    String             @db.VarChar(64)
+  materializedThrough DateTime?          @db.Date
+  archivedAt          DateTime?          @db.Timestamptz(3)
+  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
+  user                User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project             Project?           @relation(fields: [projectId, userId], references: [id, userId], onDelete: Restrict)
+  revisions           ActivityRevision[]
+  occurrences         Occurrence[]
+
+  @@unique([id, userId])
+  @@index([userId, archivedAt, createdAt])
+  @@index([projectId, userId])
+}
+
+// Immutable snapshots. New recurrent terms take effect at the next period boundary.
+model ActivityRevision {
+  id              String       @id @default(uuid()) @db.Uuid
+  activityId      String       @db.Uuid
+  userId          String       @db.Uuid
+  version         Int
+  effectiveFrom   DateTime     @db.Date
+  title           String       @db.VarChar(120)
+  description     String?      @db.VarChar(2000)
+  categoryId      String       @db.Uuid
+  targetQuantity  Decimal      @db.Decimal(12, 3)
+  unit            String       @db.VarChar(40)
+  targetCount     Int          @default(1)
+  endDate         DateTime?    @db.Date
+  xpPerCompletion Int
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  activity        Activity     @relation(fields: [activityId, userId], references: [id, userId], onDelete: Restrict)
+  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  occurrences     Occurrence[]
+
+  @@unique([activityId, version])
+  @@unique([id, activityId, userId])
+  @@index([activityId, effectiveFrom])
+  @@index([categoryId])
+}
+
+// Status is derived: completedAt != null => COMPLETED; endsAt <= now => OVERDUE;
+// otherwise PENDING. [startsAt, endsAt) is a half-open UTC interval.
+model Occurrence {
+  id              String           @id @default(uuid()) @db.Uuid
+  activityId      String           @db.Uuid
+  revisionId      String           @db.Uuid
+  userId          String           @db.Uuid
+  periodStartDate DateTime         @db.Date
+  scheduledDate   DateTime         @db.Date
+  startsAt        DateTime         @db.Timestamptz(3)
+  endsAt          DateTime         @db.Timestamptz(3)
+  completedAt     DateTime?        @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  activity        Activity         @relation(fields: [activityId, userId], references: [id, userId], onDelete: Restrict)
+  revision        ActivityRevision @relation(fields: [revisionId, activityId, userId], references: [id, activityId, userId], onDelete: Restrict)
+  units           OccurrenceUnit[]
+
+  @@unique([activityId, periodStartDate])
+  @@unique([id, userId])
+  @@index([revisionId, activityId, userId])
+  @@index([userId, scheduledDate])
+  @@index([userId, completedAt])
+  @@index([userId, endsAt])
+}
+
+// A weekly three-session period has units 1, 2 and 3. Every request targets one unit.
+model OccurrenceUnit {
+  id               String          @id @default(uuid()) @db.Uuid
+  occurrenceId     String          @db.Uuid
+  userId           String          @db.Uuid
+  position         Int
+  progressQuantity Decimal         @default(0) @db.Decimal(12, 3)
+  occurrence       Occurrence      @relation(fields: [occurrenceId, userId], references: [id, userId], onDelete: Restrict)
+  progress         ProgressEntry[]
+  completion       Completion?
+
+  @@unique([occurrenceId, position])
+  @@unique([id, userId])
+}
+
+// The HTTP Idempotency-Key and canonical payload hash protect partial progress too.
+// responseBody is written in the same transaction, enabling exact response replay.
+model ProgressEntry {
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @db.Uuid
+  occurrenceUnitId String         @db.Uuid
+  idempotencyKey   String         @db.Uuid
+  requestHash      String         @db.Char(64)
+  amount           Decimal        @db.Decimal(12, 3)
+  recordedAt       DateTime       @default(now()) @db.Timestamptz(3)
+  localDate        DateTime       @db.Date
+  timeZone         String         @db.VarChar(64)
+  responseBody     Json           @db.JsonB
+  user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  occurrenceUnit   OccurrenceUnit @relation(fields: [occurrenceUnitId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([occurrenceUnitId, userId, recordedAt])
+  @@index([userId, recordedAt, id])
+}
+
+model Completion {
+  id               String         @id @default(uuid()) @db.Uuid
+  userId           String         @db.Uuid
+  occurrenceUnitId String         @unique @db.Uuid
+  completedAt      DateTime       @default(now()) @db.Timestamptz(3)
+  localDate        DateTime       @db.Date
+  timeZone         String         @db.VarChar(64)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  occurrenceUnit   OccurrenceUnit @relation(fields: [occurrenceUnitId, userId], references: [id, userId], onDelete: Restrict)
+  xpMovement       XpMovement?
+
+  @@unique([id, userId])
+  @@unique([occurrenceUnitId, userId])
+  @@index([userId, completedAt, id])
+  @@index([userId, localDate])
+}
+
+// Append-only ledger: exactly one positive XP grant per completed unit in this MVP.
+model XpMovement {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @db.Uuid
+  completionId String     @unique @db.Uuid
+  amount       Int
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  completion   Completion @relation(fields: [completionId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@unique([completionId, userId])
+  @@index([userId, createdAt, id])
+}
+
+// Dates use the user's zone at the event. History is not reclassified after a zone edit.
+model ActiveDay {
+  userId    String   @db.Uuid
+  localDate DateTime @db.Date
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([userId, localDate])
+}
+
+model Level {
+  number     Int    @id
+  minTotalXp Int    @unique
+  name       String @db.VarChar(80)
+}
+
+model Badge {
+  id          String          @id @default(uuid()) @db.Uuid
+  code        String          @unique @db.VarChar(60)
+  name        String          @db.VarChar(80)
+  description String          @db.VarChar(255)
+  rule        AchievementRule
+  threshold   Int
+  iconKey     String          @db.VarChar(60)
+  users       UserBadge[]
+}
+
+model UserBadge {
+  userId   String   @db.Uuid
+  badgeId  String   @db.Uuid
+  earnedAt DateTime @default(now()) @db.Timestamptz(3)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  badge    Badge    @relation(fields: [badgeId], references: [id], onDelete: Restrict)
+
+  @@id([userId, badgeId])
+  @@index([badgeId])
+  @@index([userId, earnedAt])
+}
+
+model Reward {
+  id          String          @id @default(uuid()) @db.Uuid
+  code        String          @unique @db.VarChar(60)
+  name        String          @db.VarChar(80)
+  description String          @db.VarChar(255)
+  kind        RewardKind
+  value       String          @db.VarChar(100)
+  rule        AchievementRule
+  threshold   Int
+  users       UserReward[]
+}
+
+model UserReward {
+  userId     String   @db.Uuid
+  rewardId   String   @db.Uuid
+  unlockedAt DateTime @default(now()) @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reward     Reward   @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+
+  @@id([userId, rewardId])
+  @@index([rewardId])
+  @@index([userId, unlockedAt])
+}
