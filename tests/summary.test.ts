@@ -5,6 +5,17 @@ import { calculateLevel, calculateStreak } from '../src/modules/gamification/sum
 import { levels } from '../prisma/catalog.ts';
 import { authEnvironmentSchema } from '../src/config/env.ts';
 
+test('gamification calculations are deterministic and accept frozen inputs', () => {
+  const thresholds = Object.freeze(levels.map((level) => Object.freeze({ ...level })));
+  const days = Object.freeze(['2026-01-02', '2026-01-01', '2026-01-02']);
+  const thresholdsBefore = structuredClone(thresholds);
+  const daysBefore = [...days];
+  assert.deepEqual(calculateLevel(410, thresholds), calculateLevel(410, thresholds));
+  assert.deepEqual(calculateStreak(days, '2026-01-02'), calculateStreak(days, '2026-01-02'));
+  assert.deepEqual(thresholds, thresholdsBefore);
+  assert.deepEqual(days, daysBefore);
+});
+
 test('level thresholds include boundaries and skip intermediate levels', () => {
   for (const [xp, level] of [[0, 1], [99, 1], [100, 2], [399, 2], [400, 3], [410, 3], [1600, 5]]) {
     assert.equal(calculateLevel(xp!, levels).level, level);

@@ -3,6 +3,19 @@ import { test } from 'node:test';
 import { periodBounds } from '../src/modules/activities/recurrence.ts';
 import { buildTimeSeries, dashboardQuerySchema, statisticsQuerySchema } from '../src/modules/statistics/statistics.service.ts';
 
+test('statistics projection does not mutate events and is independent of the system clock', () => {
+  const events = Object.freeze([
+    Object.freeze({ date: '2030-01-01', xp: 20 }),
+    Object.freeze({ date: '2030-01-02', xp: 40 }),
+  ]);
+  const before = structuredClone(events);
+  const first = buildTimeSeries('2030-01-01', '2030-01-07', 'WEEK', events, 100);
+  const second = buildTimeSeries('2030-01-01', '2030-01-07', 'WEEK', events, 100);
+  assert.deepEqual(first, second);
+  assert.deepEqual(events, before);
+  assert.equal(first.xpSeries[0]!.cumulativeXp, 160);
+});
+
 test('daily boundaries follow daylight saving changes instead of adding 24 hours', () => {
   const spring = periodBounds('DAILY', '2026-03-08', 'America/New_York', '2026-03-01', null);
   const autumn = periodBounds('DAILY', '2026-11-01', 'America/New_York', '2026-03-01', null);

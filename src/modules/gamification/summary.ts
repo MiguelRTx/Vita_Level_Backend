@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.ts';
 import { AppError } from '../../shared/errors/app-error.ts';
 
-export function calculateLevel(totalXp: number, levels: { number: number; minTotalXp: number }[]) {
+export function calculateLevel(totalXp: number, levels: ReadonlyArray<Readonly<{ number: number; minTotalXp: number }>>) {
   const current = [...levels].reverse().find((level) => level.minTotalXp <= totalXp);
   if (!current) throw new AppError(503, 'CATALOG_NOT_READY', 'Run the database seed before using this feature');
   const next = levels.find((level) => level.number > current.number);
@@ -17,7 +17,7 @@ export function calculateLevel(totalXp: number, levels: { number: number; minTot
   };
 }
 
-export function calculateStreak(dates: string[], today: string) {
+export function calculateStreak(dates: readonly string[], today: string) {
   const sorted = [...new Set(dates)].filter((date) => date <= today).sort();
   let length = 0;
   let bestStreak = 0;

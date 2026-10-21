@@ -14,7 +14,7 @@ export type StatisticsQuery = z.infer<typeof statisticsQuerySchema>;
 function completionFilter(userId: string, query: StatisticsQuery): Prisma.CompletionWhereInput {
   return { userId, localDate: { gte: dbDate(query.from), lte: dbDate(query.to) }, occurrenceUnit: { occurrence: { ...(query.activityId ? { activityId: query.activityId } : {}), ...(query.categoryId ? { revision: { categoryId: query.categoryId } } : {}) } } };
 }
-export function buildTimeSeries(from: string, to: string, interval: 'WEEK' | 'MONTH', events: { date: string; xp: number }[], openingXp: number) {
+export function buildTimeSeries(from: string, to: string, interval: 'WEEK' | 'MONTH', events: ReadonlyArray<Readonly<{ date: string; xp: number }>>, openingXp: number) {
   const heatmap: { date: string; count: number }[] = [];
   const xpSeries: { startDate: string; endDate: string; earnedXp: number; cumulativeXp: number }[] = [];
   const byDay = new Map<string, { count: number; xp: number }>();

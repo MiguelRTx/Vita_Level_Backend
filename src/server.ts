@@ -1,4 +1,5 @@
 import 'dotenv/config';
+// Credentials are captured at startup; restart this process after rotating them.
 import { ZodError } from 'zod';
 import { createApp } from './app.ts';
 import { authEnvironmentSchema, parseEnvironment } from './config/env.ts';
