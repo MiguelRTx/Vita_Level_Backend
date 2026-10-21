@@ -7,7 +7,6 @@ dist/
 !.env.*.example
 .envrc
 
-# Local output and credentials. Keep Prisma migration SQL and lockfiles tracked.
 coverage/
 *.log
 *.tsbuildinfo
