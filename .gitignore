@@ -6,7 +6,6 @@ dist/
 !.env.example
 !.env.*.example
 .envrc
-
 coverage/
 *.log
 *.tsbuildinfo
