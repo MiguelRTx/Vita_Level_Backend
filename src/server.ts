@@ -5,12 +5,14 @@ import { createApp } from './app.ts';
 import { authEnvironmentSchema, parseEnvironment } from './config/env.ts';
 import { createApiRouter } from './routes.ts';
 import { createDatabaseClient } from './database/client.ts';
+import { assertApplicationRole } from './database/user-context.ts';
 import { createHealthRepository } from './modules/health/health.repository.ts';
 
-function main() {
+async function main() {
   const environment = parseEnvironment(process.env);
   const authentication = authEnvironmentSchema.parse(process.env);
   const database = createDatabaseClient(environment.DATABASE_URL);
+  try { await assertApplicationRole(database); } catch (error) { await database.$disconnect(); throw error; }
   const app = createApp({
     healthRepository: createHealthRepository(database),
     corsOrigins: environment.CORS_ORIGINS,
@@ -41,9 +43,7 @@ function main() {
   });
 }
 
-try {
-  main();
-} catch (error: unknown) {
+main().catch((error: unknown) => {
   console.error(JSON.stringify({
     event: 'startup_failed',
     ...(error instanceof ZodError
@@ -51,4 +51,4 @@ try {
       : {}),
   }));
   process.exitCode = 1;
-}
+});

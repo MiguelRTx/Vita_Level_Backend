@@ -9,7 +9,7 @@ import { createHealthRepository } from '../src/modules/health/health.repository.
 import { seedCatalog, levels } from '../prisma/catalog.ts';
 import type { Prisma } from '../src/generated/prisma/client.ts';
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 if (!connectionString || process.env.NODE_ENV !== 'test' || !new URL(connectionString).pathname.endsWith('_test')) {
   throw new Error('Use NODE_ENV=test and DATABASE_URL pointing to a dedicated database ending in _test.');
 }

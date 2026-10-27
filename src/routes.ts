@@ -11,12 +11,14 @@ import { createActivitiesRouter } from './modules/activities/activities.routes.t
 import { createProgressRouter } from './modules/progress/progress.routes.ts';
 import { createProjectsRouter } from './modules/projects/projects.routes.ts';
 import { createStatisticsRouter } from './modules/statistics/statistics.routes.ts';
+import { userWriteLimit } from './shared/middleware/rate-limits.ts';
 
 export function createApiRouter(database: PrismaClient, config: AuthEnvironment, defaultTimeZone: string, xpPerCompletion = 20, clock = () => new Date()) {
   const router = Router();
   const auth = createAuthService(createAuthRepository(database), config, defaultTimeZone);
   router.use('/auth', createAuthRouter(auth));
   router.use(requireAuth(auth));
+  router.use(userWriteLimit());
   router.use('/me', createUsersRouter(database, clock));
   router.use(createCatalogRouter(database));
   router.use(createActivitiesRouter(database, xpPerCompletion, clock));

@@ -4,7 +4,7 @@ import { createDatabaseClient } from '../src/database/client.ts';
 import { seedCatalog } from './catalog.ts';
 
 async function main() {
-  const connectionString = z.url().parse(process.env.DATABASE_URL);
+  const connectionString = z.url().parse(process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL);
   const database = createDatabaseClient(connectionString);
   try {
     await seedCatalog(database);

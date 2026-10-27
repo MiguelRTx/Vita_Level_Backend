@@ -56,9 +56,10 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not start local PostgreSQL. Check .local/postgres.log and port 55432.' }
 }
 
-$urlLine = Get-Content -LiteralPath $envPath | Where-Object { $_.StartsWith('DATABASE_URL=') } | Select-Object -First 1
+$urlLine = Get-Content -LiteralPath $envPath | Where-Object { $_.StartsWith('MIGRATION_DATABASE_URL=') } | Select-Object -First 1
+if (-not $urlLine) { $urlLine = Get-Content -LiteralPath $envPath | Where-Object { $_.StartsWith('DATABASE_URL=') } | Select-Object -First 1 }
 if (-not $urlLine) { throw 'DATABASE_URL missing from .env.' }
-$databaseUri = [Uri]$urlLine.Substring(13)
+$databaseUri = [Uri]($urlLine.Substring($urlLine.IndexOf('=') + 1))
 if ($databaseUri.Host -ne '127.0.0.1' -or $databaseUri.Port -ne 55432) { throw 'The .env does not refer to this local database.' }
 $previousPassword = $env:PGPASSWORD
 try {

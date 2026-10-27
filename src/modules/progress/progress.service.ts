@@ -1,3 +1,4 @@
+import { withUser } from '../../database/user-context.ts';
 import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '../../generated/prisma/client.ts';
 import { dbDate, invalid, lockUser, notFound, page, todayIn } from '../../shared/domain.ts';
@@ -10,15 +11,18 @@ import { completionDto, completionInclude, progressDto } from './progress.reposi
 export function createProgressService(database: PrismaClient, clock = () => new Date()) {
   return {
     async list(userId: string, id: string, query: { page: number; pageSize: number }) {
+      return withUser(database, userId, async (database) => {
       if (!await database.occurrenceUnit.findFirst({ where: { id, userId } })) throw notFound();
       const where = { userId, occurrenceUnitId: id };
-      const [rows, count] = await Promise.all([database.progressEntry.findMany({ where, orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }], skip: (query.page - 1) * query.pageSize, take: query.pageSize }), database.progressEntry.count({ where })]);
+      const rows = await database.progressEntry.findMany({ where, orderBy: [{ recordedAt: 'desc' }, { id: 'desc' }], skip: (query.page - 1) * query.pageSize, take: query.pageSize });
+      const count = await database.progressEntry.count({ where });
       return page(rows.map(progressDto), count, query);
+      });
     },
     async record(userId: string, id: string, amountText: string, key: string) {
       const amount = new Prisma.Decimal(amountText);
       const requestHash = createHash('sha256').update(JSON.stringify(['progress-v1', id, amount.toFixed(3)])).digest('hex');
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         const { timeZone } = await lockUser(tx, userId);
         // Read the clock after taking the lock; a queued request may cross midnight.
         const now = clock();

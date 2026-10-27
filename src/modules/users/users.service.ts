@@ -1,3 +1,4 @@
+import { withUser } from '../../database/user-context.ts';
 import { DateTime } from 'luxon';
 import { AppError } from '../../shared/errors/app-error.ts';
 import { readSummary } from '../gamification/summary.ts';
@@ -7,7 +8,7 @@ import type { createUsersRepository } from './users.repository.ts';
 
 export function createUsersService(repository: ReturnType<typeof createUsersRepository>, clock = () => new Date()) {
   async function getProfile(userId: string) {
-    return repository.database.$transaction(async (tx) => {
+    return withUser(repository.database, userId, async (tx) => {
       await lockUser(tx, userId);
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: publicUserSelect });
       const gamification = await readSummary(tx, userId, clock());
@@ -18,7 +19,7 @@ export function createUsersService(repository: ReturnType<typeof createUsersRepo
   return {
     getProfile,
     async updateProfile(userId: string, patch: { displayName?: string | undefined; timeZone?: string | undefined }) {
-      await repository.database.$transaction(async (transaction) => {
+      await withUser(repository.database, userId, async (transaction) => {
         await transaction.$queryRaw`SELECT id FROM "User" WHERE id = ${userId}::uuid FOR UPDATE`;
         const user = await transaction.user.findUniqueOrThrow({ where: { id: userId }, select: publicUserSelect });
         if (patch.timeZone && patch.timeZone !== user.timeZone) {

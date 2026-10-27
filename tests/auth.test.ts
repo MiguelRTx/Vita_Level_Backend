@@ -13,9 +13,10 @@ import { seedCatalog } from '../prisma/catalog.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url || process.env.NODE_ENV !== 'test' || !new URL(url).pathname.endsWith('_test')) throw new Error('Use NODE_ENV=test and a dedicated _test database.');
-const database = createDatabaseClient(url);
+const database = createDatabaseClient(process.env.MIGRATION_DATABASE_URL ?? url);
+const applicationDatabase = createDatabaseClient(url);
 const config = { JWT_SECRET: randomBytes(48).toString('base64url'), JWT_ISSUER: 'test-api', JWT_AUDIENCE: 'test-app', JWT_TTL_SECONDS: 3600 };
-const app = createApp({ healthRepository: createHealthRepository(database), corsOrigins: [], apiRouter: createApiRouter(database, config, 'America/La_Paz') });
+const app = createApp({ healthRepository: createHealthRepository(database), corsOrigins: [], apiRouter: createApiRouter(applicationDatabase, config, 'America/La_Paz') });
 const password = 'Only-a-test-password-123';
 const email = `${randomUUID()}@example.test`;
 const ownedIds: string[] = [];
@@ -34,7 +35,7 @@ after(async () => {
       await tx.session.deleteMany({ where: { userId: { in: ownedIds } } });
       await tx.user.deleteMany({ where: { id: { in: ownedIds } } });
     });
-  } finally { await database.$disconnect(); }
+  } finally { await applicationDatabase.$disconnect(); await database.$disconnect(); }
 });
 
 test('register creates an Argon2id hash and a session without exposing secrets', async () => {

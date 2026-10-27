@@ -7,14 +7,16 @@ import { createHealthRouter } from './modules/health/health.routes.ts';
 import type { HealthRepository } from './modules/health/health.repository.ts';
 import { AppError } from './shared/errors/app-error.ts';
 import { errorHandler, notFound } from './shared/middleware/error-handler.ts';
+import { requestLimit } from './shared/middleware/rate-limits.ts';
 
 export interface AppDependencies {
   healthRepository: HealthRepository;
   corsOrigins: readonly string[];
   apiRouter?: Router;
+  rateLimitMax?: number;
 }
 
-export function createApp({ healthRepository, corsOrigins, apiRouter }: AppDependencies) {
+export function createApp({ healthRepository, corsOrigins, apiRouter, rateLimitMax = 300 }: AppDependencies) {
   const app = express();
   app.disable('x-powered-by');
   app.use((_request, response, next) => {
@@ -24,7 +26,7 @@ export function createApp({ healthRepository, corsOrigins, apiRouter }: AppDepen
     response.setHeader('Cache-Control', 'no-store');
     next();
   });
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], baseUri: ["'none'"], formAction: ["'none'"] } } }));
   app.use(cors({
     origin(origin, callback) {
       if (!origin || corsOrigins.includes(origin)) {
@@ -38,6 +40,7 @@ export function createApp({ healthRepository, corsOrigins, apiRouter }: AppDepen
     allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
     exposedHeaders: ['X-Request-Id', 'Idempotency-Replayed'],
   }));
+  app.use(requestLimit(rateLimitMax, 60000));
   app.use(express.json({ limit: '32kb' }));
   app.get('/live', (_request, response) => {
     response.json({ data: { status: 'alive' } });

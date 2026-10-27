@@ -12,15 +12,16 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/http.test.ts tests/config.test.ts tests/summary.test.ts tests/recurrence.test.ts",
-    "test:db": "tsx --test --test-concurrency=1 tests/database.test.ts tests/auth.test.ts tests/workflows.test.ts",
+    "test": "tsx --test tests/http.test.ts tests/config.test.ts tests/summary.test.ts tests/recurrence.test.ts tests/security.test.ts",
+    "test:db": "tsx --test --test-concurrency=1 tests/database.test.ts tests/auth.test.ts tests/workflows.test.ts tests/rls.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:format": "prisma format",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:status": "prisma migrate status"
+    "db:status": "prisma migrate status",
+    "security:setup": "tsx scripts/setup-security.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

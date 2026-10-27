@@ -1,3 +1,4 @@
+import { withUser } from '../../database/user-context.ts';
 import { DateTime } from 'luxon';
 import { z } from 'zod';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.ts';
@@ -40,6 +41,7 @@ export function buildTimeSeries(from: string, to: string, interval: 'WEEK' | 'MO
 export function createStatisticsService(database: PrismaClient, clock: () => Date) {
   return {
     async history(userId: string, query: StatisticsQuery, kind: 'completions' | 'xp') {
+      return withUser(database, userId, async (database) => {
       const user = await database.user.findUniqueOrThrow({ where: { id: userId }, select: { timeZone: true } });
       if (query.to > todayIn(clock(), user.timeZone)) throw invalid('History filters cannot include future dates');
       const rows = await database.completion.findMany({ where: completionFilter(userId, query), include: completionInclude, orderBy: [{ completedAt: 'desc' }, { id: 'desc' }] });
@@ -48,9 +50,10 @@ export function createStatisticsService(database: PrismaClient, clock: () => Dat
         return { id: row.xpMovement!.id, amount: row.xpMovement!.amount, createdAt: row.xpMovement!.createdAt, completionId: row.id, activityId: item.activityId, activityTitle: item.activityTitle, category: item.category, localDate: item.localDate, timeZone: item.timeZone };
       }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
       return paginate<(typeof data)[number]>(data, { page: query.page, pageSize: query.pageSize });
+      });
     },
     async dashboard(userId: string, query: StatisticsQuery) {
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         const { timeZone } = await lockUser(tx, userId);
         const now = clock();
         if (query.to > todayIn(now, timeZone)) throw invalid('Dashboard filters cannot include future dates');

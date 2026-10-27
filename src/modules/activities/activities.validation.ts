@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { dateSchema, idSchema, paginationSchema, quantitySchema, rangeSchema } from '../../shared/domain.ts';
+import { plainText } from '../../shared/validation.ts';
 
 const fields = {
-  title: z.string().trim().min(1).max(120), description: z.string().trim().max(2000).nullable().optional(),
-  categoryId: idSchema, targetQuantity: quantitySchema, unit: z.string().trim().min(1).max(40),
+  title: plainText(120), description: plainText(2000, 0).nullable().optional(),
+  categoryId: idSchema, targetQuantity: quantitySchema, unit: plainText(40),
   targetCount: z.number().int().min(1).max(20), endDate: dateSchema.nullable().optional(),
 };
 export const createActivitySchema = z.strictObject({ ...fields, targetCount: fields.targetCount.default(1), frequency: z.enum(['ONCE', 'DAILY', 'WEEKLY']), startDate: dateSchema, projectId: idSchema.nullable().optional() });

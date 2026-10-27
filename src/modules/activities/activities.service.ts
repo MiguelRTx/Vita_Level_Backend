@@ -1,3 +1,4 @@
+import { withUser } from '../../database/user-context.ts';
 import { DateTime } from 'luxon';
 import type { Prisma, PrismaClient } from '../../generated/prisma/client.ts';
 import { civil, dbDate, invalid, lockUser, paginate, todayIn } from '../../shared/domain.ts';
@@ -22,14 +23,16 @@ async function validateTerms(tx: Prisma.TransactionClient, userId: string, input
 export function createActivitiesService(database: PrismaClient, xpPerCompletion: number, clock = () => new Date()) {
   return {
     async list(userId: string, query: ActivityQuery) {
+      return withUser(database, userId, async (database) => {
       const now = clock();
       const rows = await database.activity.findMany({ where: { userId, archivedAt: query.archived === 'true' ? { not: null } : null, ...(query.frequency ? { frequency: query.frequency } : {}), ...(query.projectId ? { projectId: query.projectId } : {}) }, include: activityInclude, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
       const data = rows.map((row) => activityDto(row, now)).filter((row) => !query.categoryId || row.currentRevision.category.id === query.categoryId);
       return paginate(data, { page: query.page, pageSize: query.pageSize });
+      });
     },
-    async get(userId: string, id: string) { return activityDto(await findActivity(database, userId, id), clock()); },
+    async get(userId: string, id: string) { return withUser(database, userId, async (tx) => activityDto(await findActivity(tx, userId, id), clock())); },
     async create(userId: string, input: ActivityCreate) {
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         const { timeZone } = await lockUser(tx, userId);
         const now = clock();
         if (input.startDate < todayIn(now, timeZone)) throw invalid('Retroactive activities are not allowed');
@@ -43,7 +46,7 @@ export function createActivitiesService(database: PrismaClient, xpPerCompletion:
       }, { timeout: 30000 });
     },
     async edit(userId: string, id: string, input: ActivityEdit) {
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         await lockUser(tx, userId);
         const now = clock();
         const row = await findActivity(tx, userId, id);
@@ -73,7 +76,7 @@ export function createActivitiesService(database: PrismaClient, xpPerCompletion:
       }, { timeout: 30000 });
     },
     async archive(userId: string, id: string) {
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         await lockUser(tx, userId);
         const now = clock();
         const row = await findActivity(tx, userId, id);
@@ -85,7 +88,7 @@ export function createActivitiesService(database: PrismaClient, xpPerCompletion:
       }, { timeout: 30000 });
     },
     async occurrences(userId: string, id: string, query: OccurrenceQuery) {
-      return database.$transaction(async (tx) => {
+      return withUser(database, userId, async (tx) => {
         await lockUser(tx, userId);
         const now = clock();
         await materializeActivity(tx, await findActivity(tx, userId, id), now);
@@ -94,6 +97,6 @@ export function createActivitiesService(database: PrismaClient, xpPerCompletion:
         return paginate(data, { page: query.page, pageSize: query.pageSize });
       }, { timeout: 30000 });
     },
-    async occurrence(userId: string, id: string) { return occurrenceDto(await findOccurrence(database, userId, id), clock()); },
+    async occurrence(userId: string, id: string) { return withUser(database, userId, async (tx) => occurrenceDto(await findOccurrence(tx, userId, id), clock())); },
   };
 }

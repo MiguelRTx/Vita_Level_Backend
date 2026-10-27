@@ -11,10 +11,11 @@ import { seedCatalog } from '../prisma/catalog.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url || process.env.NODE_ENV !== 'test' || !new URL(url).pathname.endsWith('_test')) throw new Error('Use a dedicated _test database.');
-const database = createDatabaseClient(url);
+const database = createDatabaseClient(process.env.MIGRATION_DATABASE_URL ?? url);
+const applicationDatabase = createDatabaseClient(url);
 const config = { JWT_SECRET: randomBytes(48).toString('base64url'), JWT_ISSUER: 'workflow', JWT_AUDIENCE: 'workflow', JWT_TTL_SECONDS: 3600 };
 let now = new Date('2030-01-07T16:00:00Z'); // Monday, injected into domain services only.
-const app = createApp({ healthRepository: createHealthRepository(database), corsOrigins: [], apiRouter: createApiRouter(database, config, 'America/La_Paz', 20, () => now) });
+const app = createApp({ healthRepository: createHealthRepository(database), corsOrigins: [], apiRouter: createApiRouter(applicationDatabase, config, 'America/La_Paz', 20, () => now) });
 let token: string, otherToken: string, owner: string, otherOwner: string;
 let categories: { id: string; slug: string }[];
 let weeklyId: string, weeklyOccurrenceId: string, units: { id: string }[];
@@ -46,7 +47,7 @@ after(async () => {
     await tx.xpMovement.deleteMany({ where }); await tx.progressEntry.deleteMany({ where }); await tx.completion.deleteMany({ where });
     await tx.occurrenceUnit.deleteMany({ where }); await tx.occurrence.deleteMany({ where }); await tx.activityRevision.deleteMany({ where }); await tx.activity.deleteMany({ where }); await tx.project.deleteMany({ where });
     await tx.userBadge.deleteMany({ where }); await tx.userReward.deleteMany({ where }); await tx.activeDay.deleteMany({ where }); await tx.session.deleteMany({ where }); await tx.user.deleteMany({ where: { id: where.userId } });
-  }); } finally { await database.$disconnect(); }
+  }); } finally { await applicationDatabase.$disconnect(); await database.$disconnect(); }
 });
 test('weekly units and partial progress are explicit; duplicate requests replay the same response', async () => {
   const activity = await create({ frequency: 'WEEKLY', targetCount: 3 });

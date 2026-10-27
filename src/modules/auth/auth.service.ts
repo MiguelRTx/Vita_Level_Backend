@@ -65,7 +65,7 @@ export function createAuthService(repository: ReturnType<typeof createAuthReposi
       } catch {
         throw new AppError(401, 'SESSION_EXPIRED', 'Sign in again to continue');
       }
-      const session = await repository.findSession(identity.sid);
+      const session = await repository.findSession(identity.sid, identity.sub);
       if (!session || session.userId !== identity.sub || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
         throw new AppError(401, 'SESSION_EXPIRED', 'Sign in again to continue');
       }
